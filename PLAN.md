@@ -9,7 +9,7 @@
 - 파일은 `index.html` 하나로 동작한다. 외부 라이브러리·외부 글꼴·분석 도구를 쓰지 않는다.
 - 붙여넣은 데이터는 브라우저 밖으로 보내지 않고 저장하지도 않는다.
   - `fetch`·`XMLHttpRequest`·폼 전송·`localStorage` 등을 쓰지 않는다.
-  - Content-Security-Policy 메타 태그로 외부 연결(`connect-src`, `img-src`, `font-src`, `form-action` 등)을 막는다.
+  - Content-Security-Policy 메타 태그(`default-src 'none'`)로 외부 연결을 모두 막고, 인라인 `<script>`·`<style>`은 sha256 해시로만 허용한다(`tools/update-csp.js`로 갱신, 시험이 일치 여부를 확인).
   - 입력란은 `autocomplete="off"`, `spellcheck="false"`로 둔다.
 - 저장소 맨 위에 빈 `.nojekyll` 파일을 둔다(GitHub Pages가 Jekyll 처리를 하지 않도록).
 
@@ -37,7 +37,7 @@
   - `<script id="survey-core">`: 계산 로직만 담은 순수 함수(`parseTsv`, `classifyCell`, `formatAverage`, `summarize`). DOM에 손대지 않으며 `SurveyCore` 객체로 내보낸다.
   - `<script id="survey-ui">`: 입력란·버튼·결과 표만 다룬다. 결과는 `textContent`로 넣어 붙여넣은 값이 HTML로 해석되지 않게 한다.
 - `test/core.test.js`: `index.html`에서 `survey-core` 블록만 꺼내 Node `vm`에서 실행해 시험한다(`node --test`, 외부 의존 없음).
-- `test/privacy.test.js`: `index.html`에 외부 주소·네트워크·저장 API가 없는지, CSP가 있는지 검사한다.
+- `test/privacy.test.js`: `index.html`에 외부 주소·네트워크·저장 API·`innerHTML`이 없는지, CSP 해시가 맞는지 검사한다.
 - `package.json`: `npm test` → `node --test`.
 
 ## 작업 순서(작업마다 커밋)

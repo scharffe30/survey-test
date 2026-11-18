@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>설문 집계기</title>
+</head>
+<body>
+<script id="survey-core">
+/* 계산 로직: DOM에 손대지 않는 순수 함수만 둔다. 시험(test/core.test.js)이 이 블록만 꺼내 실행한다. */
+(function (root) {
+  'use strict';
+
+  var VALID = { '1': 1, '2': 2, '3': 3, '4': 4, '5': 5 };
+
+  // 엑셀 클립보드 형식(탭 구분, 필요할 때 큰따옴표로 감쌈)을 줄×칸 배열로 바꾼다.
+  // 길이가 0인 줄은 건너뛴다. 닫히지 않은 큰따옴표가 있으면 따옴표를 글자 그대로 보고 다시 읽는다.
+  function parseTsv(text, noQuotes) {
+    text = String(text == null ? '' : text);
+    if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+    var rows = [];
+    var row = [];
+    var field = '';
+    var lineLen = 0;
+    var inQuotes = false;
+    var atFieldStart = true;
+    var n = text.length;
+
+    function endRow() {
+      if (lineLen > 0) {
+        row.push(field);
+        rows.push(row);
+      }
+      row = [];
+      field = '';
+      lineLen = 0;
+      atFieldStart = true;
+    }
+
+    for (var i = 0; i < n; i++) {
+      var c = text[i];
+      if (inQuotes) {
+        lineLen++;
+        if (c === '"') {
+          if (text[i + 1] === '"') { field += '"'; i++; }
+          else inQuotes = false;
+        } else {
+          field += c;
+        }
+        continue;
+      }
+      if (c === '\r' || c === '\n') {
+        if (c === '\r' && text[i + 1] === '\n') i++;
+        endRow();
+        continue;
+      }
+      lineLen++;
+      if (c === '\t') {
+        row.push(field);
+        field = '';
+        atFieldStart = true;
+        continue;
+      }
+      if (c === '"' && atFieldStart && !noQuotes) {
+        inQuotes = true;
+        atFieldStart = false;
+        continue;
+      }
+      atFieldStart = false;
+      field += c;
+    }
+    if (inQuotes) return parseTsv(text, true);
+    endRow();
+    return rows;
+  }
+
+  // 칸 하나를 'valid' | 'blank' | 'excluded'로 판정한다.
+  function classifyCell(value) {
+    var v = String(value == null ? '' : value).trim();
+    if (v === '') return { kind: 'blank' };
+    if (Object.prototype.hasOwnProperty.call(VALID, v)) return { kind: 'valid', score: VALID[v] };
+    return { kind: 'excluded' };
+  }
+
+  // 합 ÷ 수를 소수 셋째 자리에서 반올림해 둘째 자리까지. 정수로만 계산해 부동소수 오차를 피한다.
+  function formatAverage(sum, count) {
+    if (!count) return '-';
+    var hundredths = Math.floor((sum * 200 + count) / (2 * count));
+    var whole = Math.floor(hundredths / 100);
+    var frac = hundredths % 100;
+    return whole + '.' + (frac < 10 ? '0' : '') + frac;
+  }
+
+  function summarize(text) {
+    var rows = parseTsv(text);
+    if (rows.length === 0) return { error: 'empty', questions: [], respondents: 0 };
+    var header = rows[0];
+    if (header.length < 2) return { error: 'noQuestions', questions: [], respondents: rows.length - 1 };
+
+    var questions = [];
+    for (var q = 1; q < header.length; q++) {
+      var name = header[q].trim();
+      questions.push({ name: name === '' ? '(' + (q + 1) + '열)' : name, valid: 0, sum: 0, blank: 0, excluded: 0, average: '-' });
+    }
+    for (var r = 1; r < rows.length; r++) {
+      var cells = rows[r];
+      for (var k = 0; k < questions.length; k++) {
+        var col = k + 1;
+        var res = classifyCell(col < cells.length ? cells[col] : '');
+        var item = questions[k];
+        if (res.kind === 'valid') { item.valid++; item.sum += res.score; }
+        else if (res.kind === 'blank') item.blank++;
+        else item.excluded++;
+      }
+    }
+    for (var j = 0; j < questions.length; j++) {
+      questions[j].average = formatAverage(questions[j].sum, questions[j].valid);
+    }
+    return { error: null, questions: questions, respondents: rows.length - 1 };
+  }
+
+  root.SurveyCore = { parseTsv: parseTsv, classifyCell: classifyCell, formatAverage: formatAverage, summarize: summarize };
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+</script>
+</body>
+</html>
